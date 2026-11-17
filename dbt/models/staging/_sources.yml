@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Landed exactly as received from the Montgomery County Socrata portal. Every column is text."
+    schema: raw
+    # _source_updated_at = the county's rowsUpdatedAt for that pull, so freshness measures
+    # when the COUNTY last changed the data, not when our job last ran.
+    loaded_at_field: "nullif(_source_updated_at, '')::timestamptz"
+    tables:
+      - name: inventory
+        description: "ABS Store Inventory and Sale Items (ib5t-5ncy). Overwritten daily upstream; one landing file per day here."
+        freshness:
+          warn_after: {count: 26, period: hour}
+          error_after: {count: 2, period: day}
+      - name: purchases
+        description: "Product Purchases by DLC (kpfd-c5d5). Previous month only, overwritten monthly upstream. Quantity in cases."
+        freshness:
+          warn_after: {count: 35, period: day}
+          error_after: {count: 45, period: day}
+      - name: sales
+        description: "Warehouse and Retail Sales (v76h-r7br). Appended monthly upstream. Quantities in cases."
+        freshness:
+          warn_after: {count: 40, period: day}
+          error_after: {count: 70, period: day}

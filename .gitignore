@@ -1,0 +1,20 @@
+# secrets
+.env
+
+# sales is re-pullable from the API (upstream appends), so it is not committed
+landing/sales/
+
+# python
+__pycache__/
+.venv/
+venv/
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
+
+# power bi temp files
+powerbi/*.pbix.bak
+~$*

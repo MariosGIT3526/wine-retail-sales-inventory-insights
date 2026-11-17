@@ -1,0 +1,16 @@
+version: 2
+
+seeds:
+  - name: rls_category_access
+    description: >
+      Row-level security map for Power BI (dynamic RLS). The source data has no store column, so access
+      is by item type (category manager) instead of by store - see data-quality log #11.
+      Replace the example.com addresses with the accounts you use to demo the roles.
+    columns:
+      - name: user_email
+        data_tests: [not_null]
+      - name: item_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["WINE", "LIQUOR", "BEER", "KEGS", "NON-ALCOHOL"]

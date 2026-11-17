@@ -1,0 +1,83 @@
+name: daily-pipeline
+
+on:
+  schedule:
+    # 14:37 UTC every day (~9:37 AM Eastern). The county refreshes inventory around 13:00 UTC.
+    # Odd minute on purpose: GitHub delays jobs scheduled on the hour when it is busy.
+    - cron: "37 14 * * *"
+  workflow_dispatch:   # adds a "Run workflow" button in the Actions tab
+    inputs:
+      force:
+        description: "Re-pull every dataset even if the county hasn't changed it (use after a failed load)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write      # lets the job commit new landing files back to the repo
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
+      PGHOST: ${{ secrets.PGHOST }}
+      PGPORT: ${{ secrets.PGPORT }}
+      PGUSER: ${{ secrets.PGUSER }}
+      PGPASSWORD: ${{ secrets.PGPASSWORD }}
+      PGDATABASE: ${{ secrets.PGDATABASE }}
+      PGSSLMODE: require
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 1) EXTRACT - pull from Socrata into landing/ (needs only the app token)
+      - name: Extract from Socrata
+        run: python extract/extract.py ${{ inputs.force && '--force' || '' }}
+
+      # 2) SAVE HISTORY FIRST - commit snapshots even if a later step fails
+      - name: Commit landing files
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add landing/
+          if git diff --cached --quiet; then
+            echo "No new data today."
+          else
+            git commit -m "data: landing snapshot $(date -u +%F)"
+            git push
+          fi
+
+      # Steps 3-5 run only once the Postgres secrets exist, so you can start
+      # collecting snapshots today and connect the database later.
+      - name: Load into Postgres
+        if: env.PGHOST != ''
+        run: python extract/load.py
+
+      # 4) FRESHNESS - fails the run if the county hasn't updated inventory in 2 days
+      - name: dbt source freshness
+        if: env.PGHOST != ''
+        working-directory: dbt
+        run: dbt source freshness
+
+      # 5) TRANSFORM + TEST - staging -> intermediate -> marts, snapshots, all tests
+      - name: dbt build
+        if: env.PGHOST != ''
+        working-directory: dbt
+        run: dbt build

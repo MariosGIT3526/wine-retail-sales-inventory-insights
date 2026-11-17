@@ -1,0 +1,107 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: "Day-grain calendar with data-coverage flags."
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+
+  - name: dim_item
+    description: "One row per item code seen in any source. Current attributes (SCD1)."
+    columns:
+      - name: item_key
+        data_tests: [unique, not_null]
+      - name: item_type
+        data_tests:
+          - accepted_values:
+              values: ["WINE", "LIQUOR", "BEER", "KEGS", "NON-ALCOHOL", "STR_SUPPLIES", "REF", "DUNNAGE", "DLC"]
+      - name: current_price
+        data_tests:
+          - accepted_range: {min_value: 0, inclusive: false}
+
+  - name: dim_supplier
+    description: "Suppliers (from sales) and vendors (from purchase orders), cleaned names."
+    columns:
+      - name: supplier_key
+        data_tests: [unique, not_null]
+      - name: supplier_name
+        data_tests: [unique, not_null]
+
+  - name: fct_sales_monthly
+    description: "Monthly movement in cases. Grain: item x supplier x month. Product item types only."
+    data_tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [month_start, item_key, supplier_key]
+    columns:
+      - name: month_start
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_date'), field: date_day}
+      - name: item_key
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_item'), field: item_key}
+      - name: supplier_key
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_supplier'), field: supplier_key}
+      - name: retail_sales_cases
+        data_tests:
+          - accepted_range: {min_value: 0, config: {severity: warn}}
+
+  - name: fct_purchases_monthly
+    description: "Monthly purchases in cases. Grain: item x vendor x month."
+    data_tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [month_start, item_key, supplier_key]
+    columns:
+      - name: month_start
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_date'), field: date_day}
+      - name: item_key
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_item'), field: item_key}
+      - name: supplier_key
+        data_tests:
+          - relationships: {to: ref('dim_supplier'), field: supplier_key}
+      - name: purchased_cases
+        data_tests:
+          - accepted_range: {min_value: 0, config: {severity: warn}}
+
+  - name: fct_inventory_daily
+    description: "Daily on-hand snapshot (periodic snapshot fact). Grain: item x day. Quantity unit undocumented."
+    data_tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [snapshot_date, item_key]
+    columns:
+      - name: snapshot_date
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_date'), field: date_day}
+      - name: item_key
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_item'), field: item_key}
+      - name: on_hand_qty
+        data_tests:
+          - accepted_range: {min_value: 0}
+      - name: price
+        data_tests:
+          - accepted_range: {min_value: 0, inclusive: false}
+
+  - name: mart_item_abc
+    description: "ABC class of items by average monthly county-store cases over a period."
+    columns:
+      - name: item_key
+        data_tests:
+          - unique
+          - relationships: {to: ref('dim_item'), field: item_key}
+      - name: abc_class
+        data_tests:
+          - accepted_values: {values: ["A", "B", "C"]}
+      - name: cumulative_share
+        data_tests:
+          - accepted_range: {min_value: 0, max_value: 1.000001}

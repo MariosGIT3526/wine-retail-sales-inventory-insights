@@ -1,0 +1,14 @@
+version: 2
+
+# SCD type 2 history of item attributes. Each run compares today's attributes to the last version;
+# a change closes the old row (dbt_valid_to) and opens a new one. This is where price changes,
+# supplier switches and description edits become traceable.
+# Note: history starts the first day this runs - it cannot be reconstructed for earlier dates.
+snapshots:
+  - name: snap_item_attributes
+    relation: ref('int_item_attributes')
+    config:
+      schema: snapshots
+      unique_key: item_code
+      strategy: check
+      check_cols: [item_name, item_type, subcategory, size, current_price, latest_sales_supplier, latest_purchase_vendor]

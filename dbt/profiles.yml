@@ -1,0 +1,14 @@
+# Reads the same PG* environment variables as extract/load.py - no secrets in this file.
+abs_wine:
+  target: prod
+  outputs:
+    prod:
+      type: postgres
+      host: "{{ env_var('PGHOST') }}"
+      port: "{{ env_var('PGPORT', '5432') | int }}"
+      user: "{{ env_var('PGUSER') }}"
+      password: "{{ env_var('PGPASSWORD') }}"
+      dbname: "{{ env_var('PGDATABASE', 'postgres') }}"
+      schema: analytics
+      sslmode: "{{ env_var('PGSSLMODE', 'require') }}"
+      threads: 4

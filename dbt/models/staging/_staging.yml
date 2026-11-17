@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: stg_sales
+    description: "Typed, cleaned sales. Grain: item x month. Units: cases."
+    data_tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [month_start, item_code, supplier_name]
+    columns:
+      - name: month_start
+        data_tests: [not_null]
+      - name: item_code
+        data_tests: [not_null]
+      - name: item_type
+        data_tests:
+          - accepted_values:
+              values: ["WINE", "LIQUOR", "BEER", "KEGS", "NON-ALCOHOL", "STR_SUPPLIES", "REF", "DUNNAGE"]
+      - name: retail_sales_cases
+        description: "Negative values are returns/adjustments - expected, so this is a warning, not an error."
+        data_tests:
+          - accepted_range: {min_value: 0, config: {severity: warn}}
+      - name: retail_transfers_cases
+        data_tests:
+          - accepted_range: {min_value: 0, config: {severity: warn}}
+      - name: warehouse_sales_cases
+        data_tests:
+          - accepted_range: {min_value: 0, config: {severity: warn}}
+
+  - name: stg_purchases
+    description: "Typed, cleaned purchase-order lines. Units: cases."
+    columns:
+      - name: month_start
+        data_tests: [not_null]
+      - name: item_code
+        data_tests: [not_null]
+      - name: quantity_cases
+        data_tests:
+          - not_null
+          - accepted_range: {min_value: 0, config: {severity: warn}}
+
+  - name: stg_inventory
+    description: "Typed, cleaned daily inventory. Grain: item x snapshot day."
+    data_tests:
+      - unique_combination_of_columns:
+          combination_of_columns: [snapshot_date, item_code]
+    columns:
+      - name: snapshot_date
+        data_tests: [not_null]
+      - name: item_code
+        data_tests: [not_null]
+      - name: on_hand_qty
+        data_tests:
+          - not_null
+          - accepted_range: {min_value: 0}
+      - name: price
+        data_tests:
+          - not_null
+          - accepted_range: {min_value: 0, inclusive: false}
+      - name: sale_price
+        data_tests:
+          - accepted_range: {min_value: 0, inclusive: false}

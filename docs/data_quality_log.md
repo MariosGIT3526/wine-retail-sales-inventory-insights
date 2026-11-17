@@ -1,0 +1,29 @@
+# Data-quality log
+
+Every problem found in the source data, how it was found, and what was decided.
+**Decisions:** Fix (corrected in the pipeline) · Flag (kept, marked so it can be filtered) · Drop (excluded) · Leave (kept as-is, documented) · Open (not decided yet).
+
+| # | Found | Dataset | Problem | How it was detected | Decision | Where it's handled |
+|---|---|---|---|---|---|---|
+| 1 | 2026-10-08 | Sales | Numbers arrive as text with commas and accounting negatives (`1,035.00`, `(0.17)`) in the portal's CSV export. The API metadata types these columns as numbers, so this looks like an export-formatting artifact. | Casting to number produced ~3,400 nulls | **Fix**: `parse_number` macro accepts both formats; values that still won't parse become NULL and fail `not_null` tests | `macros/cleaning.sql` |
+| 2 | 2026-10-09 | Sales, Inventory | Item codes contain letters in 60 sales rows and 2 inventory rows (`123A`, `239766A`, `WC`, `BC`) | Integer cast produced errors | **Fix**: item codes are always text (`clean_code`) | `macros/cleaning.sql` |
+| 3 | 2026-10-08 | Sales | Whole months missing: Mar–Dec 2018, Dec 2019, Feb/Apr–Jun/Aug 2020, Oct 2020–May 2026 | Count of distinct months | **Leave + Flag**: no imputation. `dim_date.has_sales_data` lets visuals skip missing months; comparisons use matched months only. Re-check against a full API pull. | `dim_date` |
+| 4 | 2026-10-09 | Sales | 5,941 item codes changed supplier or description over time (e.g. `303145`: Bacchus Importers 2019 → Winebow 2026) | Duplicate-key error building a product table | **Fix**: current values in `dim_item`; supplier at the time on each `fct_sales_monthly` row; attribute history in `snap_item_attributes` (SCD2) | `int_item_attributes`, snapshot |
+| 5 | 2026-10-08 | Purchases | Same item repeated within a month (8,122 rows, 8,113 distinct codes in Sep 2026) | Row count vs distinct count | **Fix**: summed to item × vendor × month; `source_line_count` keeps the evidence | `fct_purchases_monthly` |
+| 6 | 2026-10-08 | Sales, Purchases | Negative quantities (returns/adjustments); DUNNAGE and REF net negative | Range check | **Flag**: kept in totals; `accepted_range` tests set to *warn* | `_staging.yml`, `_marts.yml` |
+| 7 | 2026-10-29 | Inventory | Quantity unit undocumented ("Total Amount in Inventory"). Sales and purchases are documented as **cases**. 646K wine units on hand vs ~16K cases sold/month = 40 months of stock as-is, ~3.4 months if inventory is bottles (12/case). | API data dictionary + months-of-supply sanity check | **Open**: confirm with pack sizes for a sample of items before any months-of-supply metric is published | — |
+| 8 | 2026-10-08 | Inventory | 61% of items show zero on hand | Distribution check | **Flag**: `is_zero_stock`; out-of-stock vs discontinued to be separated using recent sales | `fct_inventory_daily` |
+| 9 | 2026-10-29 | Sales vs Purchases | For ~1.2% of items, the purchase-order vendor differs from the sales supplier (distributor vs brand owner, e.g. Southern Glazer's vs Eastern Liquor Distributors) | Supplier join test: 232 of 235 vendors match exactly; 98.8% of shared items have the same name | **Fix**: one supplier dimension with a role (`sales only` / `purchases only` / `both`); each fact keeps its own source's supplier | `int_suppliers`, `dim_supplier` |
+| 10 | 2026-10-29 | Purchases | Repeated whitespace in names (`ANKARA  HOSPITALITY GROUP LLC`) | Supplier join test | **Fix**: trim, upper-case, collapse spaces (`clean_name`) | `macros/cleaning.sql` |
+| 11 | 2026-11-16 | Inventory | No store column. "Total Inventory" is one county-wide total per item (confirmed in API metadata). | Schema review of `/api/views/ib5t-5ncy.json` | **Leave**: no store dimension; Power BI RLS is by item type (category manager) instead of by store | `seeds/rls_category_access.csv` |
+| 12 | 2026-11-16 | Inventory, Purchases | Both are **overwritten** upstream (inventory daily, purchases monthly). History exists only if we keep it. | API metadata (update frequency, rowsUpdatedAt) and file contents (one month / no date column) | **Fix**: daily GitHub Actions job saves dated files to `landing/`; manual exports backfilled | `extract/`, `.github/workflows/` |
+| 13 | 2026-11-16 | Inventory | No as-of date column in the data | Schema review | **Fix**: `_snapshot_date` = county's `rowsUpdatedAt`, converted to Eastern time | `extract/extract.py` |
+| 14 | 2026-11-16 | Inventory, Purchases | Backfilled manual exports: the inventory export's snapshot date is the download date (approximate); purchases export has no county timestamp | Known from how the files were obtained | **Flag**: `extract_method = 'manual_export'` on every backfilled row | `extract/backfill_from_csv.py` |
+| 15 | 2026-11-16 | Purchases | Month stored as a name (`September`), not a number | Schema review | **Fix**: parsed to `month_start` date | `stg_purchases` |
+| 16 | 2026-11-16 | Purchases vs Sales | Category labels differ (`KEG` vs `KEGS`); purchases also use a `DLC` category | Value comparison | **Fix**: `KEG` → `KEGS`; `DLC` kept and allowed | `int_item_attributes` |
+| 17 | 2026-10-08 | Sales | 204 rows with no supplier; 1 row with no item type | Null counts | **Fix**: supplier → `UNKNOWN` | `stg_sales` |
+| 18 | 2026-10-08 | Sales | Non-product item types (DUNNAGE = pallets, REF = refunds, STR_SUPPLIES = store supplies) | Value review | **Drop** from facts (kept in staging) | `fct_sales_monthly`, `vars.product_item_types` |
+| 19 | 2026-10-08 | Purchases (export only) | Column header `"ITEM "` has a trailing space in the portal export | Header inspection | **Fix**: headers stripped in backfill; API field name is `item` | `backfill_from_csv.py` |
+
+## How to add an entry
+Add a row with the next number, the date, and one of the five decisions. If a later finding changes a decision, update the row and note the date in the Decision column. Don't delete rows.

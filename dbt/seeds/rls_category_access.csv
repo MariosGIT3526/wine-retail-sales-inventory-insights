@@ -1,0 +1,10 @@
+user_email,item_type
+wine.manager@example.com,WINE
+spirits.manager@example.com,LIQUOR
+beer.manager@example.com,BEER
+beer.manager@example.com,KEGS
+director@example.com,WINE
+director@example.com,LIQUOR
+director@example.com,BEER
+director@example.com,KEGS
+director@example.com,NON-ALCOHOL
