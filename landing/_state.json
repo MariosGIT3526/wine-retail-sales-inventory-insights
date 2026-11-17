@@ -1,0 +1,14 @@
+{
+  "inventory": {
+    "row_count": 7021,
+    "rows_updated_at": "2026-11-16T13:00:34+00:00"
+  },
+  "purchases": {
+    "row_count": 8649,
+    "rows_updated_at": "2026-11-01T13:05:11+00:00"
+  },
+  "sales": {
+    "row_count": 352419,
+    "rows_updated_at": "2026-11-05T13:02:16+00:00"
+  }
+}
