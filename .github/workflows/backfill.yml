@@ -1,0 +1,41 @@
+name: backfill-manual-export
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: "Which dataset"
+        type: choice
+        options: [inventory, purchases]
+      file:
+        description: "Path to the CSV in the repo, e.g. data/manual_exports/export 2.csv"
+        required: true
+      snapshot_date:
+        description: "Inventory only: the day you downloaded it (YYYY-MM-DD)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Convert export to landing file
+        run: |
+          if [ -n "${{ inputs.snapshot_date }}" ]; then
+            python extract/backfill_from_csv.py ${{ inputs.dataset }} "${{ inputs.file }}" --snapshot-date ${{ inputs.snapshot_date }}
+          else
+            python extract/backfill_from_csv.py ${{ inputs.dataset }} "${{ inputs.file }}"
+          fi
+      - name: Commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add landing/
+          git diff --cached --quiet || (git commit -m "data: backfill ${{ inputs.dataset }} from manual export" && git push)
