@@ -17,7 +17,7 @@ import sys
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from config import DATASETS, LOCAL_TZ
+from config import DATASETS, LANDING_DIR, LOCAL_TZ
 from landing import add_meta, land, read_state, write_state
 from socrata import SocrataClient
 
@@ -45,7 +45,8 @@ def run(only: list[str] | None, force: bool) -> int:
             meta = client.get_metadata(cfg["id"])
             updated = meta["rows_updated_at"]
             updated_iso = updated.isoformat() if updated else ""
-            if not force and updated_iso and state.get(name, {}).get("rows_updated_at") == updated_iso:
+            landed_here = cfg["mode"] != "cumulative" or (LANDING_DIR / name / f"{name}_latest.csv.gz").exists()
+            if not force and landed_here and updated_iso and state.get(name, {}).get("rows_updated_at") == updated_iso:
                 log.info("%s: unchanged since %s - skipping", name, updated_iso)
                 continue
 
